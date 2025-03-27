@@ -1,169 +1,68 @@
-const fs = require('fs').promises;
-const path = require('path');
-const config = require('./config/config');
-const embeddingService = require('./services/embedding-service');
-const supabaseService = require('./services/supabase-service');
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const memoryService = require('./services/memory-service');
 
-// Legacy file-based memory store (keeping for backward compatibility)
-const MEMORY_FILE = path.join(__dirname, 'memory.json');
-let memoryStore = {};
+const app = express();
+const port = process.env.PORT || 3000;
 
-// Initialize memory store
-async function initializeMemoryStore() {
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.post('/memory', async (req, res) => {
     try {
-        try {
-            const data = await fs.readFile(MEMORY_FILE, 'utf8');
-            memoryStore = JSON.parse(data || '{}');
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                await fs.writeFile(MEMORY_FILE, JSON.stringify({}, null, 2));
-            } else {
-                await fs.writeFile(MEMORY_FILE, JSON.stringify({}, null, 2));
-            }
-            memoryStore = {};
-        }
-        return true;
+        const { content, metadata } = req.body;
+        const memory = await memoryService.saveMemory(content, metadata);
+        res.json(memory);
     } catch (error) {
-        console.error('Error initializing memory store:', error);
-        throw error;
+        console.error('Error saving memory:', error);
+        res.status(500).json({ error: 'Failed to save memory' });
     }
-}
+});
 
-// Save memory to disk (legacy method)
-async function saveToDisk() {
+app.get('/memory/search', async (req, res) => {
     try {
-        await fs.writeFile(MEMORY_FILE, JSON.stringify(memoryStore, null, 2));
+        const { query, limit, threshold } = req.query;
+        const memories = await memoryService.searchMemories(
+            query,
+            parseInt(limit) || 5,
+            parseFloat(threshold) || 0.7
+        );
+        res.json(memories);
     } catch (error) {
-        console.error('Error saving to disk:', error);
-        throw error;
+        console.error('Error searching memories:', error);
+        res.status(500).json({ error: 'Failed to search memories' });
     }
-}
+});
 
-// MCP server implementation
-const mcpServer = {
-    name: 'memory-mcp-server',
-    version: '1.0.0',
-    
-    tools: {
-        // Legacy tools (file-based)
-        async saveMemory(params) {
-            const { key, value } = params;
-            if (!key || !value) {
-                throw new Error('Both key and value are required');
-            }
-            
-            memoryStore[key] = value;
-            await saveToDisk();
-            return `Value saved for key: ${key}`;
-        },
-
-        async recallMemory(params) {
-            const { key } = params;
-            if (!key) {
-                throw new Error('Key is required');
-            }
-            
-            const value = memoryStore[key];
-            return value !== undefined ? value : `Key not found: ${key}`;
-        },
-
-        async listMemoryKeys() {
-            return Object.keys(memoryStore);
-        },
-
-        async deleteMemory(params) {
-            const { key } = params;
-            if (!key) {
-                throw new Error('Key is required');
-            }
-            
-            if (key in memoryStore) {
-                delete memoryStore[key];
-                await saveToDisk();
-                return `Deleted key: ${key}`;
-            }
-            return `Key not found: ${key}`;
-        },
-
-        // New semantic search tools
-        async saveAndEmbedMemory(params) {
-            const { content, metadata = {} } = params;
-            if (!content) {
-                throw new Error('Content is required');
-            }
-
-            try {
-                const embedding = await embeddingService.generateEmbedding(content);
-                const result = await supabaseService.saveMemory(content, embedding, metadata);
-                return {
-                    message: 'Memory saved with embedding',
-                    id: result.id,
-                    content: result.content
-                };
-            } catch (error) {
-                throw new Error(`Failed to save and embed memory: ${error.message}`);
-            }
-        },
-
-        async searchSimilarMemory(params) {
-            const { queryText, limit = config.defaults.maxResults } = params;
-            if (!queryText) {
-                throw new Error('Query text is required');
-            }
-
-            try {
-                const queryEmbedding = await embeddingService.generateEmbedding(queryText);
-                const results = await supabaseService.findSimilarMemories(queryEmbedding, limit);
-                
-                return results.map(result => ({
-                    content: result.content,
-                    similarity: result.similarity,
-                    metadata: result.metadata
-                }));
-            } catch (error) {
-                throw new Error(`Failed to search similar memories: ${error.message}`);
-            }
-        },
-
-        async listAllMemories() {
-            try {
-                return await supabaseService.listMemories();
-            } catch (error) {
-                throw new Error(`Failed to list memories: ${error.message}`);
-            }
-        }
-    },
-
-    async handleRequest(request) {
-        const { tool, params } = request;
-        
-        if (!this.tools[tool]) {
-            throw new Error(`Tool ${tool} not found`);
-        }
-
-        return await this.tools[tool](params);
-    }
-};
-
-// Initialize and start the server
-async function startServer() {
+app.get('/memory', async (req, res) => {
     try {
-        await initializeMemoryStore();
-        console.log('Memory MCP server initialized successfully');
-        return true;
+        const memories = await memoryService.listMemories();
+        res.json(memories);
     } catch (error) {
-        console.error('Failed to initialize server:', error);
-        throw error;
+        console.error('Error listing memories:', error);
+        res.status(500).json({ error: 'Failed to list memories' });
     }
-}
+});
 
-// Export the MCP server
-module.exports = mcpServer;
+app.delete('/memory/:id', async (req, res) => {
+    try {
+        await memoryService.deleteMemory(req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error deleting memory:', error);
+        res.status(500).json({ error: 'Failed to delete memory' });
+    }
+});
 
-// If this file is run directly (not required as a module)
-if (require.main === module) {
-    startServer().catch(error => {
-        console.error('Server startup failed:', error);
-        process.exit(1);
-    });
-} 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+// Start server
+app.listen(port, () => {
+    console.log(`Memory MCP Server running on port ${port}`);
+}); 
