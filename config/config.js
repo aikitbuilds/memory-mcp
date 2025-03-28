@@ -6,6 +6,14 @@ const config = {
         model: 'text-embedding-ada-002',
         dimensions: 1536 // Dimensions of the embedding vector for Ada-002
     },
+    gemini: {
+        apiKey: process.env.GEMINI_API_KEY || 'not_required_for_basic_operations',
+        model: 'gemini-2.5-pro',
+        maxOutputTokens: 2048,
+        temperature: 0.7,
+        topP: 0.8,
+        topK: 40
+    },
     supabase: {
         url: process.env.SUPABASE_URL,
         key: process.env.SUPABASE_KEY,

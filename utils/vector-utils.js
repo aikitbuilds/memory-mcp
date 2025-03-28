@@ -1,10 +1,10 @@
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
+const config = require('../config/config');
 
-// Initialize OpenAI configuration
-const configuration = new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
 });
-const openai = new OpenAIApi(configuration);
 
 /**
  * Generate embedding for a given text using OpenAI's API
@@ -13,11 +13,11 @@ const openai = new OpenAIApi(configuration);
  */
 async function generateEmbedding(text) {
     try {
-        const response = await openai.createEmbedding({
-            model: "text-embedding-ada-002",
+        const response = await openai.embeddings.create({
+            model: config.openai.model,
             input: text,
         });
-        return response.data.data[0].embedding;
+        return response.data[0].embedding;
     } catch (error) {
         console.error('Error generating embedding:', error);
         throw error;

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const memoryService = require('./services/memory-service');
+const geminiService = require('./services/gemini-service');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -54,6 +55,33 @@ app.delete('/memory/:id', async (req, res) => {
     } catch (error) {
         console.error('Error deleting memory:', error);
         res.status(500).json({ error: 'Failed to delete memory' });
+    }
+});
+
+// New chat endpoint
+app.post('/chat', async (req, res) => {
+    try {
+        const { message } = req.body;
+        if (!message) {
+            return res.status(400).json({ error: 'Message is required' });
+        }
+
+        const response = await geminiService.sendMessage(message);
+        res.json({ response });
+    } catch (error) {
+        console.error('Error in chat:', error);
+        res.status(500).json({ error: 'Failed to process chat message' });
+    }
+});
+
+// Reset chat endpoint
+app.post('/chat/reset', async (req, res) => {
+    try {
+        await geminiService.resetChat();
+        res.json({ message: 'Chat history reset successfully' });
+    } catch (error) {
+        console.error('Error resetting chat:', error);
+        res.status(500).json({ error: 'Failed to reset chat' });
     }
 });
 

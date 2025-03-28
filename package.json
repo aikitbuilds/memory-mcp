@@ -1,7 +1,7 @@
 {
   "name": "memory-mcp-server",
   "version": "1.0.0",
-  "description": "Memory MCP Server with vector similarity search",
+  "description": "Memory Context Protocol server with Gemini integration",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -9,6 +9,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.2.0",
     "@supabase/supabase-js": "^2.39.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
